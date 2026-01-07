@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Three.js Ocean Sunset with Rotating Cube</title>
+    <title>Three.js Ocean Sunset - Fixed</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <style>
@@ -38,7 +38,7 @@
         let camera, scene, renderer;
         let water, sun, mesh;
 
-        // Variables for mouse rotation logic
+        // Mouse variables
         let targetRotationX = 0;
         let targetRotationY = 0;
         let mouseX = 0;
@@ -54,32 +54,38 @@
             container = document.createElement('div');
             document.body.appendChild(container);
 
-            // 1. Renderer Setup
-            renderer = new THREE.WebGLRenderer();
+            // 1. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.toneMapping = THREE.ACESFilmicToneMapping; // Cinematic lighting
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
             renderer.toneMappingExposure = 0.5;
             container.appendChild(renderer.domElement);
 
-            // 2. Scene & Camera
+            // 2. Scene & Camera (CENTERED)
             scene = new THREE.Scene();
+            
+            // Changed X to 0 to center it. Y is 30 to look down slightly. Z is 100 distance.
             camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 20000);
-            camera.position.set(30, 30, 100);
+            camera.position.set(0, 30, 100); 
 
-            // 3. Lighting (Sun)
+            // 3. Sun
             sun = new THREE.Vector3();
 
             // 4. Water
             const waterGeometry = new THREE.PlaneGeometry(10000, 10000);
+            
+            // USING RELIABLE UNPKG URL for water normals
+            const waterNormals = new THREE.TextureLoader().load( 'https://unpkg.com/three@0.160.0/examples/textures/water/waternormals.jpg', function ( texture ) {
+                texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            });
+
             water = new Water(
                 waterGeometry,
                 {
                     textureWidth: 512,
                     textureHeight: 512,
-                    waterNormals: new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water/waternormals.jpg', function (texture) {
-                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    }),
+                    waterNormals: waterNormals,
                     sunDirection: new THREE.Vector3(),
                     sunColor: 0xffffff,
                     waterColor: 0x001e0f,
@@ -101,16 +107,11 @@
             skyUniforms['mieCoefficient'].value = 0.005;
             skyUniforms['mieDirectionalG'].value = 0.8;
 
-            // Sun Position Calculation (Sunset logic)
-            const parameters = {
-                elevation: 2, // Low elevation for sunset
-                azimuth: 180
-            };
-
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
             let renderTarget;
 
             function updateSun() {
+                const parameters = { elevation: 2, azimuth: 180 };
                 const phi = THREE.MathUtils.degToRad(90 - parameters.elevation);
                 const theta = THREE.MathUtils.degToRad(parameters.azimuth);
 
@@ -126,27 +127,30 @@
 
             updateSun();
 
-            // 6. The Cube (Simulating the rock texture)
-            // We use a texture loader. If you have local textures, replace these URLs.
+            // 6. The Cube (HOVERING)
             const textureLoader = new THREE.TextureLoader();
             
-            // Using a generic rock texture from a placeholder source for demo purposes
-            // In a real project, download "Wet Rock" textures from Polyhaven.com
-            const rockColor = textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/floors/FloorsCheckerboard_S_Diffuse.jpg'); 
-            // Note: I am using a placeholder texture. For the EXACT look, you need a "Granite" or "Mossy Rock" texture map.
-            
+            // RELIABLE TEXTURE URL (Brick/Rock pattern)
+            const rockTexture = textureLoader.load('https://unpkg.com/three@0.160.0/examples/textures/brick_diffuse.jpg');
+            const rockRoughness = textureLoader.load('https://unpkg.com/three@0.160.0/examples/textures/brick_roughness.jpg');
+
             const geometry = new THREE.BoxGeometry(30, 30, 30);
             const material = new THREE.MeshStandardMaterial({
-                color: 0x555555, // Dark grey base
-                roughness: 0.1,  // Very smooth/wet
-                metalness: 0.1,
-                bumpScale: 1
+                map: rockTexture,
+                roughnessMap: rockRoughness,
+                color: 0x888888, // Fallback color if texture fails
+                roughness: 0.2,
+                metalness: 0.1
             });
 
             mesh = new THREE.Mesh(geometry, material);
-            mesh.position.y = 15; // Floating slightly above water
-            mesh.rotation.x = Math.PI / 6; // Initial tilt
-            mesh.rotation.z = Math.PI / 6;
+            
+            // Position Math:
+            // Cube Height = 30. Center = 15. 
+            // To hover, Y must be > 15. 
+            // Setting to 25 gives a 10 unit gap between water and cube.
+            mesh.position.y = 25; 
+            
             scene.add(mesh);
 
             // 7. Event Listeners
@@ -161,7 +165,6 @@
         }
 
         function onDocumentMouseMove(event) {
-            // Calculate mouse position relative to center of screen
             mouseX = (event.clientX - windowHalfX);
             mouseY = (event.clientY - windowHalfY);
         }
@@ -174,19 +177,18 @@
         function render() {
             const time = performance.now() * 0.001;
 
-            // Animate Water
             water.material.uniforms['time'].value += 1.0 / 60.0;
 
-            // Rotate Cube based on Mouse
-            // We use a lerp (linear interpolation) for smooth movement
-            targetRotationY = mouseX * 0.005;
-            targetRotationX = mouseY * 0.005;
+            // Rotation logic
+            targetRotationY = mouseX * 0.001; // Slower, smoother rotation
+            targetRotationX = mouseY * 0.001;
 
             mesh.rotation.y += 0.05 * (targetRotationY - mesh.rotation.y);
             mesh.rotation.x += 0.05 * (targetRotationX - mesh.rotation.x);
             
-            // Add a slight bobbing motion to the cube to simulate floating
-            mesh.position.y = 15 + Math.sin(time) * 2;
+            // Hover animation (Bobbing up and down)
+            // Base Y is 25, bobs between 23 and 27
+            mesh.position.y = 25 + Math.sin(time) * 2;
 
             renderer.render(scene, camera);
         }
