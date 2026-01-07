@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Three.js Ocean Sunset with Rotating Cube</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: Monospace;
+            font-size: 13px;
+            line-height: 24px;
+            overscroll-behavior: none;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { Water } from 'three/addons/objects/Water.js';
+        import { Sky } from 'three/addons/objects/Sky.js';
+
+        let container;
+        let camera, scene, renderer;
+        let water, sun, mesh;
+
+        // Variables for mouse rotation logic
+        let targetRotationX = 0;
+        let targetRotationY = 0;
+        let mouseX = 0;
+        let mouseY = 0;
+        
+        const windowHalfX = window.innerWidth / 2;
+        const windowHalfY = window.innerHeight / 2;
+
+        init();
+        animate();
+
+        function init() {
+            container = document.createElement('div');
+            document.body.appendChild(container);
+
+            // 1. Renderer Setup
+            renderer = new THREE.WebGLRenderer();
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping; // Cinematic lighting
+            renderer.toneMappingExposure = 0.5;
+            container.appendChild(renderer.domElement);
+
+            // 2. Scene & Camera
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 20000);
+            camera.position.set(30, 30, 100);
+
+            // 3. Lighting (Sun)
+            sun = new THREE.Vector3();
+
+            // 4. Water
+            const waterGeometry = new THREE.PlaneGeometry(10000, 10000);
+            water = new Water(
+                waterGeometry,
+                {
+                    textureWidth: 512,
+                    textureHeight: 512,
+                    waterNormals: new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water/waternormals.jpg', function (texture) {
+                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                    }),
+                    sunDirection: new THREE.Vector3(),
+                    sunColor: 0xffffff,
+                    waterColor: 0x001e0f,
+                    distortionScale: 3.7,
+                    fog: scene.fog !== undefined
+                }
+            );
+            water.rotation.x = - Math.PI / 2;
+            scene.add(water);
+
+            // 5. Skybox
+            const sky = new Sky();
+            sky.scale.setScalar(10000);
+            scene.add(sky);
+
+            const skyUniforms = sky.material.uniforms;
+            skyUniforms['turbidity'].value = 10;
+            skyUniforms['rayleigh'].value = 2;
+            skyUniforms['mieCoefficient'].value = 0.005;
+            skyUniforms['mieDirectionalG'].value = 0.8;
+
+            // Sun Position Calculation (Sunset logic)
+            const parameters = {
+                elevation: 2, // Low elevation for sunset
+                azimuth: 180
+            };
+
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            let renderTarget;
+
+            function updateSun() {
+                const phi = THREE.MathUtils.degToRad(90 - parameters.elevation);
+                const theta = THREE.MathUtils.degToRad(parameters.azimuth);
+
+                sun.setFromSphericalCoords(1, phi, theta);
+
+                sky.material.uniforms['sunPosition'].value.copy(sun);
+                water.material.uniforms['sunDirection'].value.copy(sun).normalize();
+
+                if (renderTarget) renderTarget.dispose();
+                renderTarget = pmremGenerator.fromScene(sky);
+                scene.environment = renderTarget.texture;
+            }
+
+            updateSun();
+
+            // 6. The Cube (Simulating the rock texture)
+            // We use a texture loader. If you have local textures, replace these URLs.
+            const textureLoader = new THREE.TextureLoader();
+            
+            // Using a generic rock texture from a placeholder source for demo purposes
+            // In a real project, download "Wet Rock" textures from Polyhaven.com
+            const rockColor = textureLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/floors/FloorsCheckerboard_S_Diffuse.jpg'); 
+            // Note: I am using a placeholder texture. For the EXACT look, you need a "Granite" or "Mossy Rock" texture map.
+            
+            const geometry = new THREE.BoxGeometry(30, 30, 30);
+            const material = new THREE.MeshStandardMaterial({
+                color: 0x555555, // Dark grey base
+                roughness: 0.1,  // Very smooth/wet
+                metalness: 0.1,
+                bumpScale: 1
+            });
+
+            mesh = new THREE.Mesh(geometry, material);
+            mesh.position.y = 15; // Floating slightly above water
+            mesh.rotation.x = Math.PI / 6; // Initial tilt
+            mesh.rotation.z = Math.PI / 6;
+            scene.add(mesh);
+
+            // 7. Event Listeners
+            document.addEventListener('mousemove', onDocumentMouseMove);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function onDocumentMouseMove(event) {
+            // Calculate mouse position relative to center of screen
+            mouseX = (event.clientX - windowHalfX);
+            mouseY = (event.clientY - windowHalfY);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            render();
+        }
+
+        function render() {
+            const time = performance.now() * 0.001;
+
+            // Animate Water
+            water.material.uniforms['time'].value += 1.0 / 60.0;
+
+            // Rotate Cube based on Mouse
+            // We use a lerp (linear interpolation) for smooth movement
+            targetRotationY = mouseX * 0.005;
+            targetRotationX = mouseY * 0.005;
+
+            mesh.rotation.y += 0.05 * (targetRotationY - mesh.rotation.y);
+            mesh.rotation.x += 0.05 * (targetRotationX - mesh.rotation.x);
+            
+            // Add a slight bobbing motion to the cube to simulate floating
+            mesh.position.y = 15 + Math.sin(time) * 2;
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
