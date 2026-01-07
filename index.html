@@ -1,24 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Three.js Ocean Sunset - Fixed</title>
+    <title>Three.js Ocean - Final Fix</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <style>
-        body {
-            margin: 0;
-            background-color: #000;
-            color: #fff;
-            font-family: Monospace;
-            font-size: 13px;
-            line-height: 24px;
-            overscroll-behavior: none;
-            overflow: hidden;
-        }
+        body { margin: 0; background-color: #000; overflow: hidden; }
     </style>
 </head>
 <body>
-
     <script type="importmap">
         {
             "imports": {
@@ -30,20 +20,13 @@
 
     <script type="module">
         import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { Water } from 'three/addons/objects/Water.js';
         import { Sky } from 'three/addons/objects/Sky.js';
 
         let container;
         let camera, scene, renderer;
         let water, sun, mesh;
-
-        // Mouse variables
-        let targetRotationX = 0;
-        let targetRotationY = 0;
-        let mouseX = 0;
-        let mouseY = 0;
-        
+        let mouseX = 0, mouseY = 0;
         const windowHalfX = window.innerWidth / 2;
         const windowHalfY = window.innerHeight / 2;
 
@@ -62,21 +45,21 @@
             renderer.toneMappingExposure = 0.5;
             container.appendChild(renderer.domElement);
 
-            // 2. Scene & Camera (CENTERED)
+            // 2. Scene & Camera
             scene = new THREE.Scene();
-            
-            // Changed X to 0 to center it. Y is 30 to look down slightly. Z is 100 distance.
             camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 20000);
-            camera.position.set(0, 30, 100); 
+            
+            // Camera Position: X=0 (Center), Y=30 (Height), Z=100 (Distance)
+            camera.position.set(0, 30, 100);
 
-            // 3. Sun
+            // 3. Lighting (Sun)
             sun = new THREE.Vector3();
 
             // 4. Water
             const waterGeometry = new THREE.PlaneGeometry(10000, 10000);
             
-            // USING RELIABLE UNPKG URL for water normals
-            const waterNormals = new THREE.TextureLoader().load( 'https://unpkg.com/three@0.160.0/examples/textures/water/waternormals.jpg', function ( texture ) {
+            // LOAD LOCAL WATER TEXTURE
+            const waterNormals = new THREE.TextureLoader().load( 'waternormals.jpg', function ( texture ) {
                 texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
             });
 
@@ -110,8 +93,12 @@
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
             let renderTarget;
 
+            // --- MOVED SUN FURTHER RIGHT ---
+            // Elevation: 0 to 90 (0 is sunset, 90 is noon)
+            // Azimuth: -180 to 180 (Horizontal position). Changed to 120 for extreme right.
+            const parameters = { elevation: 2, azimuth: 120 };
+
             function updateSun() {
-                const parameters = { elevation: 2, azimuth: 180 };
                 const phi = THREE.MathUtils.degToRad(90 - parameters.elevation);
                 const theta = THREE.MathUtils.degToRad(parameters.azimuth);
 
@@ -127,33 +114,28 @@
 
             updateSun();
 
-            // 6. The Cube (HOVERING)
+            // 6. The Cube
             const textureLoader = new THREE.TextureLoader();
-            
-            // RELIABLE TEXTURE URL (Brick/Rock pattern)
-            const rockTexture = textureLoader.load('https://unpkg.com/three@0.160.0/examples/textures/brick_diffuse.jpg');
-            const rockRoughness = textureLoader.load('https://unpkg.com/three@0.160.0/examples/textures/brick_roughness.jpg');
+
+            // LOAD LOCAL ROCK TEXTURES (Must be .jpg)
+            const rockColor = textureLoader.load('rock_color.jpg');
+            const rockNormal = textureLoader.load('rock_normal.jpg');
+            const rockRoughness = textureLoader.load('rock_roughness.jpg');
 
             const geometry = new THREE.BoxGeometry(30, 30, 30);
             const material = new THREE.MeshStandardMaterial({
-                map: rockTexture,
+                map: rockColor,
+                normalMap: rockNormal,
                 roughnessMap: rockRoughness,
-                color: 0x888888, // Fallback color if texture fails
-                roughness: 0.2,
-                metalness: 0.1
+                roughness: 0.1, // Makes it look wet
+                metalness: 0.0
             });
 
             mesh = new THREE.Mesh(geometry, material);
-            
-            // Position Math:
-            // Cube Height = 30. Center = 15. 
-            // To hover, Y must be > 15. 
-            // Setting to 25 gives a 10 unit gap between water and cube.
-            mesh.position.y = 25; 
-            
+            mesh.position.y = 25; // Hovering above water
             scene.add(mesh);
 
-            // 7. Event Listeners
+            // 7. Events
             document.addEventListener('mousemove', onDocumentMouseMove);
             window.addEventListener('resize', onWindowResize);
         }
@@ -179,15 +161,14 @@
 
             water.material.uniforms['time'].value += 1.0 / 60.0;
 
-            // Rotation logic
-            targetRotationY = mouseX * 0.001; // Slower, smoother rotation
-            targetRotationX = mouseY * 0.001;
-
+            // Rotate Cube
+            let targetRotationY = mouseX * 0.001;
+            let targetRotationX = mouseY * 0.001;
+            
             mesh.rotation.y += 0.05 * (targetRotationY - mesh.rotation.y);
             mesh.rotation.x += 0.05 * (targetRotationX - mesh.rotation.x);
             
-            // Hover animation (Bobbing up and down)
-            // Base Y is 25, bobs between 23 and 27
+            // Bobbing Animation
             mesh.position.y = 25 + Math.sin(time) * 2;
 
             renderer.render(scene, camera);
